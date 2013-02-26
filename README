@@ -1,0 +1,10 @@
+OpenFlow @ California Institute of Technology 
+OpenFlow for Link-Layer Multipath Switching (OLiMPS)
+
+Author: Michael Bredel
+Affiliation: California Institute of Technology, California 
+
+Summary:
+The ProxyARP enables Floodligth to offer the MAC address directly 
+to a requesting host. To this end, ARP messages are not forwarded 
+by the data plane, but handled by the control plane.
