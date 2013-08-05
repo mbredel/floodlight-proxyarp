@@ -1,0 +1,11 @@
+*~
+*.class
+.classpath
+.project
+.settings
+*.swp
+*.pyc
+*.bz2
+floodlight.log*
+*.launch
+bin
