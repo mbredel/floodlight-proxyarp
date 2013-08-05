@@ -46,11 +46,11 @@ import java.util.TimerTask;
 import org.openflow.protocol.OFMessage;
 import org.openflow.protocol.OFPacketIn;
 import org.openflow.protocol.OFPacketOut;
-import org.openflow.protocol.OFPhysicalPort;
 import org.openflow.protocol.OFPort;
 import org.openflow.protocol.OFType;
 import org.openflow.protocol.action.OFAction;
 import org.openflow.protocol.action.OFActionOutput;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -58,6 +58,7 @@ import net.floodlightcontroller.core.FloodlightContext;
 import net.floodlightcontroller.core.IFloodlightProviderService;
 import net.floodlightcontroller.core.IOFMessageListener;
 import net.floodlightcontroller.core.IOFSwitch;
+import net.floodlightcontroller.core.ImmutablePort;
 import net.floodlightcontroller.core.module.FloodlightModuleContext;
 import net.floodlightcontroller.core.module.IFloodlightModule;
 import net.floodlightcontroller.core.module.IFloodlightService;
@@ -82,7 +83,7 @@ import net.floodlightcontroller.topology.ITopologyService;
  * network. Moreover, the ARPProxy takes care that ARP requests are 
  * deleted after a certain timeout.
  * 
- * @author Michael Bredel <michael.bredel@cern.ch>
+ * @author Michael Bredel <michael.bredel@caltech.edu>
  */
 public class ARPProxy extends TimerTask implements IOFMessageListener, IFloodlightModule {
 	/** Broadcast MAC address. */
@@ -321,9 +322,8 @@ public class ARPProxy extends TimerTask implements IOFMessageListener, IFloodlig
         		IRoutingDecision decision = null;
                 if (cntx != null) {
                     decision = IRoutingDecision.rtStore.get(cntx, IRoutingDecision.CONTEXT_DECISION);
-                    return this.processPacketInMessage(sw, (OFPacketIn) msg, decision, cntx);
                 }
-                break;
+                return this.processPacketInMessage(sw, (OFPacketIn) msg, decision, cntx);
         	default:
         		break;
 			}
@@ -356,21 +356,49 @@ public class ARPProxy extends TimerTask implements IOFMessageListener, IFloodlig
 			return Command.CONTINUE;
 		}
 		
+		// If a decision has been made already we obey it.
+		if (decision != null) {
+			if (logger.isTraceEnabled()) {
+                logger.trace("Forwaring decision={} was made for PacketIn={}", decision.getRoutingAction().toString(), piMsg);
+            }
+			
+			switch(decision.getRoutingAction()) {
+            	case NONE:
+            		// Don't handle the APR message.
+            		return Command.CONTINUE;
+            	case DROP:
+            		// Don't handle the APR message.
+            		return Command.CONTINUE;
+            	case FORWARD_OR_FLOOD:
+            		// Handle the ARP message by the ARP proxy.
+            		break;
+            	case FORWARD:
+            		// Handle the ARP message by the ARP proxy.
+            		break;
+            	case MULTICAST:
+            		// Handle the ARP message by the ARP proxy.
+            		break;
+            	default:
+            		logger.error("Unexpected decision made for this packet-in={}", piMsg, decision.getRoutingAction());
+            		return Command.CONTINUE;
+			}
+		}
+		
 		// Handle ARP request.
 		if (arp.getOpCode() == ARP.OP_REQUEST) {
-			return this.handleARPRequest(arp, sw.getId(), piMsg.getInPort());
+			return this.handleARPRequest(arp, sw.getId(), piMsg.getInPort(), cntx);
 		}
 		
 		// Handle ARP reply.
 		if (arp.getOpCode() == ARP.OP_REPLY) {
-			return this.handleARPReply(arp);
+			return this.handleARPReply(arp, sw.getId(), piMsg.getInPort(), cntx);
 		}
 		
 		// Handle RARP request. TODO
 		
 		// Handle RARP reply. TODO
 		
-		// Make a routing decision and drop the ARP instead of forwarding it.
+		// Make a routing decision and forward the ARP message to subsequent modules. (Actually, this should never happen).
 		decision = new RoutingDecision(sw.getId(), piMsg.getInPort(), IDeviceService.fcStore.get(cntx, IDeviceService.CONTEXT_SRC_DEVICE), IRoutingDecision.RoutingAction.DROP);
         decision.addToContext(cntx);
 		
@@ -384,10 +412,11 @@ public class ARPProxy extends TimerTask implements IOFMessageListener, IFloodlig
 	 * 
 	 * @param arp The ARP (request) packet received.
 	 * @param switchId The ID of the incoming switch where the ARP message is received. 
-	 * @param port The Port ID where the ARP message is received.
+	 * @param portId The Port ID where the ARP message is received.
+	 * @param cntx The Floodlight context.
 	 * @return <b>Command</b> The command whether another listener should proceed or not.
 	 */
-	protected Command handleARPRequest(ARP arp, long switchId, short port) {
+	protected Command handleARPRequest(ARP arp, long switchId, short portId, FloodlightContext cntx) {
 		/* The known IP address of the ARP source. */
 		long sourceIPAddress = IPv4.toIPv4Address(arp.getSenderProtocolAddress());
 		/* The known MAC address of the ARP source. */
@@ -406,7 +435,7 @@ public class ARPProxy extends TimerTask implements IOFMessageListener, IFloodlig
 			for (Iterator<ARPRequest> iter = arpRequestSet.iterator(); iter.hasNext();) {
 				iter.next().setStartTime(startTime);
 			}
-			return Command.CONTINUE;
+			return Command.STOP;
 		}
 		
 		
@@ -429,7 +458,7 @@ public class ARPProxy extends TimerTask implements IOFMessageListener, IFloodlig
 					.setTargetMACAddress(targetMACAddress)
 					.setTargetIPAddress(targetIPAddress)
 					.setSwitchId(switchId)
-					.setInPort(port);
+					.setInPort(portId);
 				// Send ARP reply.
 				this.sendARPReply(arpRequest);
 			} else {
@@ -438,7 +467,7 @@ public class ARPProxy extends TimerTask implements IOFMessageListener, IFloodlig
 					.setSourceIPAddress(sourceIPAddress)
 					.setTargetIPAddress(targetIPAddress)
 					.setSwitchId(switchId)
-					.setInPort(port)
+					.setInPort(portId)
 					.setStartTime(System.currentTimeMillis());
 				// Put new ARPRequest object to current ARPRequests list.
 				this.putArpRequest(targetIPAddress, arpRequest);
@@ -452,13 +481,17 @@ public class ARPProxy extends TimerTask implements IOFMessageListener, IFloodlig
 				.setSourceIPAddress(sourceIPAddress)
 				.setTargetIPAddress(targetIPAddress)
 				.setSwitchId(switchId)
-				.setInPort(port)
+				.setInPort(portId)
 				.setStartTime(System.currentTimeMillis());
 			// Put new ARPRequest object to current ARPRequests list.		
 			this.putArpRequest(targetIPAddress, arpRequest);
 			// Send ARP request
 			this.sendARPReqest(arpRequest);
 		}
+		
+		// Make a routing decision and forward the ARP message
+		IRoutingDecision decision = new RoutingDecision(switchId, portId, IDeviceService.fcStore.get(cntx, IDeviceService.CONTEXT_SRC_DEVICE), IRoutingDecision.RoutingAction.DROP);
+		decision.addToContext(cntx);
 		
 		return Command.CONTINUE;
 	}
@@ -468,9 +501,12 @@ public class ARPProxy extends TimerTask implements IOFMessageListener, IFloodlig
 	 * ARPRequest object, and sends back and ARP reply message.
 	 * 
 	 * @param arp The ARP (reply) packet received.
+	 * @param switchId The ID of the incoming switch where the ARP message is received. 
+	 * @param portId The Port ID where the ARP message is received.
+	 * @param cntx The Floodlight context.
 	 * @return <p>Command</p> The command whether another listener should proceed or not.
 	 */
-	protected Command handleARPReply(ARP arp) {
+	protected Command handleARPReply(ARP arp, long switchId, short portId, FloodlightContext cntx) {
 		/* The IP address of the ARP target. */
 		long targetIPAddress = IPv4.toIPv4Address(arp.getSenderProtocolAddress());
 		/* The set of APRRequest objects related to the target IP address.*/
@@ -481,7 +517,7 @@ public class ARPProxy extends TimerTask implements IOFMessageListener, IFloodlig
 		// If the ARP request has already timed out, consume the message.
 		// The sending host should send a new request, actually.
 		if (arpRequestSet == null)
-			return Command.CONTINUE;
+			return Command.STOP;
 		
 		for (Iterator<ARPRequest> iter = arpRequestSet.iterator(); iter.hasNext();) {
 			arpRequest = iter.next();
@@ -490,6 +526,10 @@ public class ARPProxy extends TimerTask implements IOFMessageListener, IFloodlig
 			sendARPReply(arpRequest);
 		}
 		
+		// Make a routing decision and forward the ARP message
+		IRoutingDecision decision = new RoutingDecision(switchId, portId, IDeviceService.fcStore.get(cntx, IDeviceService.CONTEXT_SRC_DEVICE), IRoutingDecision.RoutingAction.DROP);
+		decision.addToContext(cntx);
+						
 		return Command.CONTINUE;
 	}
 	
@@ -519,9 +559,9 @@ public class ARPProxy extends TimerTask implements IOFMessageListener, IFloodlig
 				.setPayload(new Data(new byte[] {0x01})));
 		
 		// Send ARP request to all external ports (i.e. attachment point ports).
-		for (long switchId : floodlightProvider.getSwitches().keySet()) {
-			IOFSwitch sw = floodlightProvider.getSwitches().get(switchId);
-			for (OFPhysicalPort port : sw.getPorts()) {
+		for (long switchId : floodlightProvider.getAllSwitchDpids()) {
+			IOFSwitch sw = floodlightProvider.getSwitch(switchId);
+			for (ImmutablePort port : sw.getPorts()) {
 				short portId = port.getPortNumber();
 				if (topologyManager.isAttachmentPointPort(switchId, portId))
 					this.sendPOMessage(arpReply, sw, portId);
@@ -554,7 +594,7 @@ public class ARPProxy extends TimerTask implements IOFMessageListener, IFloodlig
 				.setTargetProtocolAddress(IPv4.toIPv4AddressBytes((int)arpRequest.getSourceIPAddress()))
 				.setPayload(new Data(new byte[] {0x01})));
 		// Send ARP reply.
-		sendPOMessage(arpReply, floodlightProvider.getSwitches().get(arpRequest.getSwitchId()), arpRequest.getInPort());
+		sendPOMessage(arpReply, floodlightProvider.getSwitch(arpRequest.getSwitchId()), arpRequest.getInPort());
 	}
 	
 	/**
