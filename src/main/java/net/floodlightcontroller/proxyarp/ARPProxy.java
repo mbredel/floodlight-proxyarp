@@ -50,6 +50,7 @@ import org.openflow.protocol.OFPort;
 import org.openflow.protocol.OFType;
 import org.openflow.protocol.action.OFAction;
 import org.openflow.protocol.action.OFActionOutput;
+import org.openflow.util.HexString;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -309,6 +310,9 @@ public class ARPProxy extends TimerTask implements IOFMessageListener, IFloodlig
 
 	@Override
 	public void startUp(FloodlightModuleContext context) {
+		if (logger.isDebugEnabled()) {
+			logger.debug("ARPProxy-Modul started");
+		}
 		floodlightProvider.addOFMessageListener(OFType.PACKET_IN, this);
 		arpRequests = new Hashtable<Long, Set<ARPRequest>>();
 		timer = new Timer();
@@ -424,7 +428,11 @@ public class ARPProxy extends TimerTask implements IOFMessageListener, IFloodlig
 		/* The IP address of the (yet unknown) ARP target. */
 		long targetIPAddress = IPv4.toIPv4Address(arp.getTargetProtocolAddress());
 		/* The MAC address of the (yet unknown) ARP target. */
-		long targetMACAddress = 0; 
+		long targetMACAddress = 0;
+		
+		if (logger.isDebugEnabled()) {
+			logger.debug("Received ARP request message from " + MACAddress.valueOf(arp.getSenderHardwareAddress()) + " at " + HexString.toHexString(switchId) + " - " + portId + " for target: " + IPv4.fromIPv4Address(IPv4.toIPv4Address(arp.getTargetProtocolAddress())));
+		}
 		
 		// Check if there is an ongoing ARP process for this packet.
 		if (arpRequests.containsKey(targetIPAddress)) {
@@ -514,6 +522,10 @@ public class ARPProxy extends TimerTask implements IOFMessageListener, IFloodlig
 		/* The ARPRequenst object related to the ARP reply message. */
 		ARPRequest arpRequest;
 		
+		if (logger.isDebugEnabled()) {
+			logger.debug("Received ARP reply message from " + MACAddress.valueOf(arp.getSenderHardwareAddress()) + " at " + HexString.toHexString(switchId) + " - " + portId);
+		}
+		
 		// If the ARP request has already timed out, consume the message.
 		// The sending host should send a new request, actually.
 		if (arpRequestSet == null)
@@ -565,6 +577,9 @@ public class ARPProxy extends TimerTask implements IOFMessageListener, IFloodlig
 				short portId = port.getPortNumber();
 				if (topologyManager.isAttachmentPointPort(switchId, portId))
 					this.sendPOMessage(arpReply, sw, portId);
+					if (logger.isDebugEnabled()) {
+						logger.debug("Send ARP request to " + HexString.toHexString(switchId) + " at port " + portId);
+					}
 			}
 		}
 	}
@@ -595,6 +610,9 @@ public class ARPProxy extends TimerTask implements IOFMessageListener, IFloodlig
 				.setPayload(new Data(new byte[] {0x01})));
 		// Send ARP reply.
 		sendPOMessage(arpReply, floodlightProvider.getSwitch(arpRequest.getSwitchId()), arpRequest.getInPort());
+		if (logger.isDebugEnabled()) {
+			logger.debug("Send ARP reply to " + HexString.toHexString(arpRequest.getSwitchId()) + " at port " + arpRequest.getInPort());
+		}
 	}
 	
 	/**
