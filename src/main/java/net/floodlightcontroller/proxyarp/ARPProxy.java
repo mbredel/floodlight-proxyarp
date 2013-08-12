@@ -344,14 +344,14 @@ public class ARPProxy extends TimerTask implements IOFMessageListener, IFloodlig
 	 * @return <b>Command</b> The command whether another listener should proceed or not.
 	 */
 	protected Command processPacketInMessage(IOFSwitch sw, OFPacketIn piMsg, IRoutingDecision decision, FloodlightContext cntx) {
-		/* A new empty ARP packet. */
-		ARP arp = new ARP();
 		/* Get the Ethernet frame representation of the PacketIn message. */
 		Ethernet ethPacket = IFloodlightProviderService.bcStore.get(cntx, IFloodlightProviderService.CONTEXT_PI_PAYLOAD);
-		
 		// If this is not an ARP message, continue.
 		if (ethPacket.getEtherType() != Ethernet.TYPE_ARP )
 			return Command.CONTINUE;
+		
+		/* A new empty ARP packet. */
+		ARP arp = new ARP();
 		
 		// Get the ARP packet or continue.
 		if (ethPacket.getPayload() instanceof ARP) {
@@ -575,6 +575,9 @@ public class ARPProxy extends TimerTask implements IOFMessageListener, IFloodlig
 			IOFSwitch sw = floodlightProvider.getSwitch(switchId);
 			for (ImmutablePort port : sw.getPorts()) {
 				short portId = port.getPortNumber();
+				if (switchId == arpRequest.getSwitchId() && portId == arpRequest.getInPort()) {
+					continue;
+				}
 				if (topologyManager.isAttachmentPointPort(switchId, portId))
 					this.sendPOMessage(arpReply, sw, portId);
 					if (logger.isDebugEnabled()) {
