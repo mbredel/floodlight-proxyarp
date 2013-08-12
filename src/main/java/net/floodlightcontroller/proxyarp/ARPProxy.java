@@ -403,7 +403,7 @@ public class ARPProxy extends TimerTask implements IOFMessageListener, IFloodlig
 		// Handle RARP reply. TODO
 		
 		// Make a routing decision and forward the ARP message to subsequent modules. (Actually, this should never happen).
-		decision = new RoutingDecision(sw.getId(), piMsg.getInPort(), IDeviceService.fcStore.get(cntx, IDeviceService.CONTEXT_SRC_DEVICE), IRoutingDecision.RoutingAction.DROP);
+		decision = new RoutingDecision(sw.getId(), piMsg.getInPort(), IDeviceService.fcStore.get(cntx, IDeviceService.CONTEXT_SRC_DEVICE), IRoutingDecision.RoutingAction.NONE);
         decision.addToContext(cntx);
 		
 		return Command.CONTINUE;
@@ -498,7 +498,7 @@ public class ARPProxy extends TimerTask implements IOFMessageListener, IFloodlig
 		}
 		
 		// Make a routing decision and forward the ARP message
-		IRoutingDecision decision = new RoutingDecision(switchId, portId, IDeviceService.fcStore.get(cntx, IDeviceService.CONTEXT_SRC_DEVICE), IRoutingDecision.RoutingAction.DROP);
+		IRoutingDecision decision = new RoutingDecision(switchId, portId, IDeviceService.fcStore.get(cntx, IDeviceService.CONTEXT_SRC_DEVICE), IRoutingDecision.RoutingAction.NONE);
 		decision.addToContext(cntx);
 		
 		return Command.CONTINUE;
@@ -539,7 +539,7 @@ public class ARPProxy extends TimerTask implements IOFMessageListener, IFloodlig
 		}
 		
 		// Make a routing decision and forward the ARP message
-		IRoutingDecision decision = new RoutingDecision(switchId, portId, IDeviceService.fcStore.get(cntx, IDeviceService.CONTEXT_SRC_DEVICE), IRoutingDecision.RoutingAction.DROP);
+		IRoutingDecision decision = new RoutingDecision(switchId, portId, IDeviceService.fcStore.get(cntx, IDeviceService.CONTEXT_SRC_DEVICE), IRoutingDecision.RoutingAction.NONE);
 		decision.addToContext(cntx);
 						
 		return Command.CONTINUE;
